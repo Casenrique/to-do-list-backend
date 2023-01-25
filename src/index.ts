@@ -84,6 +84,9 @@ app.post("/users", async (req: Request, res: Response) => {
             res.status(400)
             throw new Error("'email' deve ser string");
         }
+        if (!email.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/)) {
+			throw new Error("'email' deve ser de um domínio válido")
+		}
         if (!password.match(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,12}$/g)) {
 			throw new Error("'password' deve possuir entre 8 e 12 caracteres, com letras maiúsculas e minúsculas e no mínimo um número e um caractere especial")
 		}
@@ -229,7 +232,6 @@ app.post("/tasks", async (req: Request, res: Response) => {
             res.status(400)
             throw new Error("'id' de task já existe.")            
         }
-
         
         const newTask = {
             id,
@@ -375,6 +377,59 @@ app.delete("/tasks/:id", async (req: Request, res: Response) => {
 
         res.status(200).send({ message: "Task deletada com sucesso." })
 
+    } catch (error) {
+        console.log(error)
+
+        if (req.statusCode === 200) {
+            res.status(500)
+        }
+
+        if (error instanceof Error) {
+            res.send(error.message)
+        } else {
+            res.send("Erro inesperado")
+        }
+    }
+})
+
+app.post("/tasks/:taskId/users/:userId", async (req: Request, res: Response) => {
+    try {
+        const taskId = req.params.taskId
+        const userId = req.params.userId
+
+        if(userId[0] !== "f") {
+            res.status(400)
+            throw new Error("'id' deve começar com a letra 'f'.")            
+        }
+
+        if(taskId[0] !== "t") {
+            res.status(400)
+            throw new Error("'task' deve começar com a letra 't'.")            
+        }
+
+        const [ taskIdExists ]: TTaskDB[] | undefined = await db("tasks").where({ id: taskId })
+        
+        if(!taskIdExists) {
+            res.status(404)
+            throw new Error("'id' da task não encontrado.")            
+        }
+
+        const [ userIExists ]: TUserDB[] | undefined = await db("users").where({ id: userId })
+        
+        if(!userIExists) {
+            res.status(404)
+            throw new Error("'id' do user não encontrado")            
+        }
+
+        const newUserTask = {
+            user_id: userId,
+            task_id: taskId
+        }
+
+        await db("users_tasks").insert(newUserTask)
+
+        res.status(201).send( {message: "User atribuído à tarafa com sucesso."} )
+        
     } catch (error) {
         console.log(error)
 
