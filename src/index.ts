@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express'
 import cors from 'cors'
 import { db } from './database/knex'
-import { serialize } from 'v8'
 import { TUserDB } from './types'
 
 const app = express()
@@ -116,6 +115,42 @@ app.post("/users", async (req: Request, res: Response) => {
             message: "User criado com sucesso.",
             user: newUser
         })
+
+    } catch (error) {
+        console.log(error)
+
+        if (req.statusCode === 200) {
+            res.status(500)
+        }
+
+        if (error instanceof Error) {
+            res.send(error.message)
+        } else {
+            res.send("Erro inesperado")
+        }
+    }
+})
+
+app.delete("/users/:id", async (req: Request, res: Response) => {
+    try {
+
+        const idToDelete = req.params.id
+
+        const [ userIdAlreadyExists ]: TUserDB[] | undefined = await db("users").where({ id: idToDelete })
+
+        if(idToDelete[0] !== "f") {
+            res.status(400)
+            throw new Error("'id' deve começar com a letra 'f'.")            
+        }
+        
+        if(!userIdAlreadyExists) {
+            res.status(404)
+            throw new Error("'id' não encontrado.")            
+        }
+
+        await db("users").del().where({ id: idToDelete })
+
+        res.status(200).send({ message: "User deletado com sucesso." })
 
     } catch (error) {
         console.log(error)
