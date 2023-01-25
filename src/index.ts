@@ -397,14 +397,14 @@ app.post("/tasks/:taskId/users/:userId", async (req: Request, res: Response) => 
         const taskId = req.params.taskId
         const userId = req.params.userId
 
-        if(userId[0] !== "f") {
+        if(taskId[0] !== "f") {
             res.status(400)
-            throw new Error("'id' deve começar com a letra 'f'.")            
+            throw new Error("'taskId' deve começar com a letra 'f'.")            
         }
 
-        if(taskId[0] !== "t") {
+        if(userId[0] !== "t") {
             res.status(400)
-            throw new Error("'task' deve começar com a letra 't'.")            
+            throw new Error("'userId' deve começar com a letra 't'.")            
         }
 
         const [ taskIdExists ]: TTaskDB[] | undefined = await db("tasks").where({ id: taskId })
@@ -422,13 +422,63 @@ app.post("/tasks/:taskId/users/:userId", async (req: Request, res: Response) => 
         }
 
         const newUserTask = {
-            user_id: userId,
-            task_id: taskId
+            user_id: taskId,
+            task_id: userId
         }
 
         await db("users_tasks").insert(newUserTask)
 
-        res.status(201).send( {message: "User atribuído à tarafa com sucesso."} )
+        res.status(201).send( {message: "User atribuído à tarefa com sucesso."} )
+        
+    } catch (error) {
+        console.log(error)
+
+        if (req.statusCode === 200) {
+            res.status(500)
+        }
+
+        if (error instanceof Error) {
+            res.send(error.message)
+        } else {
+            res.send("Erro inesperado")
+        }
+    }
+})
+
+app.delete("/tasks/:taskId/users/:userId", async (req: Request, res: Response) => {
+    try {
+        const taskIdToDelete = req.params.taskId
+        const userIdToDelete = req.params.userId
+
+        if(userIdToDelete[0] !== "f") {
+            res.status(400)
+            throw new Error("'userId' deve começar com a letra 'f'.")            
+        }
+
+        if(taskIdToDelete[0] !== "t") {
+            res.status(400)
+            throw new Error("'taskId' deve começar com a letra 't'.")            
+        }
+
+        const [ taskIdExists ]: TTaskDB[] | undefined = await db("tasks").where({ id: taskIdToDelete })
+        
+        if(!taskIdExists) {
+            res.status(404)
+            throw new Error("'id' da task não encontrado.")            
+        }
+
+        const [ userIdExists ]: TUserDB[] | undefined = await db("users").where({ id: userIdToDelete })
+        
+        if(!userIdExists) {
+            res.status(404)
+            throw new Error("'id' do user não encontrado")            
+        }
+
+        await db("users_tasks").del()
+            .where({ task_id: taskIdToDelete})
+            .andWhere({ user_id: userIdToDelete })
+
+        res.status(201).send( {message: "User removido da tarefa com sucesso."} )
         
     } catch (error) {
         console.log(error)
