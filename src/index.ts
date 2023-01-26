@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express'
 import cors from 'cors'
 import { db } from './database/knex'
-import { TTaskDB, TUserDB } from './types'
+import { TTaskDB, TTaskWithUsers, TUserDB, TUserTaskDB } from './types'
 
 const app = express()
 
@@ -84,6 +84,9 @@ app.post("/users", async (req: Request, res: Response) => {
             res.status(400)
             throw new Error("'email' deve ser string");
         }
+        if (!email.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/)) {
+			throw new Error("'email' deve ser de um domínio válido")
+		}
         if (!password.match(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,12}$/g)) {
 			throw new Error("'password' deve possuir entre 8 e 12 caracteres, com letras maiúsculas e minúsculas e no mínimo um número e um caractere especial")
 		}
@@ -229,7 +232,6 @@ app.post("/tasks", async (req: Request, res: Response) => {
             res.status(400)
             throw new Error("'id' de task já existe.")            
         }
-
         
         const newTask = {
             id,
@@ -375,6 +377,165 @@ app.delete("/tasks/:id", async (req: Request, res: Response) => {
 
         res.status(200).send({ message: "Task deletada com sucesso." })
 
+    } catch (error) {
+        console.log(error)
+
+        if (req.statusCode === 200) {
+            res.status(500)
+        }
+
+        if (error instanceof Error) {
+            res.send(error.message)
+        } else {
+            res.send("Erro inesperado")
+        }
+    }
+})
+
+app.post("/tasks/:taskId/users/:userId", async (req: Request, res: Response) => {
+    try {
+        const taskId = req.params.taskId
+        const userId = req.params.userId
+
+        if(taskId[0] !== "f") {
+            res.status(400)
+            throw new Error("'taskId' deve começar com a letra 'f'.")            
+        }
+
+        if(userId[0] !== "t") {
+            res.status(400)
+            throw new Error("'userId' deve começar com a letra 't'.")            
+        }
+
+        const [ taskIdExists ]: TTaskDB[] | undefined = await db("tasks").where({ id: taskId })
+        
+        if(!taskIdExists) {
+            res.status(404)
+            throw new Error("'id' da task não encontrado.")            
+        }
+
+        const [ userIExists ]: TUserDB[] | undefined = await db("users").where({ id: userId })
+        
+        if(!userIExists) {
+            res.status(404)
+            throw new Error("'id' do user não encontrado")            
+        }
+
+        const newUserTask = {
+            user_id: taskId,
+            task_id: userId
+        }
+
+        await db("users_tasks").insert(newUserTask)
+
+        res.status(201).send( {message: "User atribuído à tarefa com sucesso."} )
+        
+    } catch (error) {
+        console.log(error)
+
+        if (req.statusCode === 200) {
+            res.status(500)
+        }
+
+        if (error instanceof Error) {
+            res.send(error.message)
+        } else {
+            res.send("Erro inesperado")
+        }
+    }
+})
+
+app.delete("/tasks/:taskId/users/:userId", async (req: Request, res: Response) => {
+    try {
+        const taskIdToDelete = req.params.taskId
+        const userIdToDelete = req.params.userId
+
+        if(userIdToDelete[0] !== "f") {
+            res.status(400)
+            throw new Error("'userId' deve começar com a letra 'f'.")            
+        }
+
+        if(taskIdToDelete[0] !== "t") {
+            res.status(400)
+            throw new Error("'taskId' deve começar com a letra 't'.")            
+        }
+
+        const [ taskIdExists ]: TTaskDB[] | undefined = await db("tasks").where({ id: taskIdToDelete })
+        
+        if(!taskIdExists) {
+            res.status(404)
+            throw new Error("'id' da task não encontrado.")            
+        }
+
+        const [ userIdExists ]: TUserDB[] | undefined = await db("users").where({ id: userIdToDelete })
+        
+        if(!userIdExists) {
+            res.status(404)
+            throw new Error("'id' do user não encontrado")            
+        }
+
+        await db("users_tasks").del()
+            .where({ task_id: taskIdToDelete})
+            .andWhere({ user_id: userIdToDelete })
+
+        res.status(201).send( {message: "User removido da tarefa com sucesso."} )
+        
+    } catch (error) {
+        console.log(error)
+
+        if (req.statusCode === 200) {
+            res.status(500)
+        }
+
+        if (error instanceof Error) {
+            res.send(error.message)
+        } else {
+            res.send("Erro inesperado")
+        }
+    }
+})
+
+app.get("/tasks/users", async (req: Request, res: Response) => {
+    try {
+        
+        // const result = await db("tasks")
+        //     .select(
+        //         "tasks.id AS taskId",
+        //         "title",
+        //         "description",
+        //         "created_at AS createdAt",
+        //         "status",
+        //         "user_id AS userId",
+        //         "name",
+        //         "email",
+        //         "password"
+        //     )
+        //     .leftJoin("users_tasks", "users_tasks.task_id", "=", "tasks.id")
+        //     .leftJoin("users", "users_tasks.user_id", "=", "users.id")
+
+        const tasks: TTaskDB[] = await db("tasks")
+
+        const result: TTaskWithUsers[] = []
+
+        for (let task of tasks) {
+            const responsibles = []
+            const users_tasks: TUserTaskDB[] = await db("users_tasks").where({ task_id: task.id })
+
+            for (let user_task of users_tasks) {
+                const [ user ]: TUserDB[] = await db("users").where({ id:user_task.user_id })
+                responsibles.push(user)
+            }
+
+            const newTaskWithUsers: TTaskWithUsers = {
+                ...task,
+                responsibles
+            }
+            result.push(newTaskWithUsers)
+
+        }
+
+        res.status(201).send(result)
+        
     } catch (error) {
         console.log(error)
 
